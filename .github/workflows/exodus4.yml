@@ -3,8 +3,8 @@ on:
   workflow_dispatch:
  
 jobs:
-  setup:
-    runs-on: ubuntu-22.04
+  setup-job:
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -16,7 +16,8 @@ jobs:
       - name: Run the Server build process
         uses: addnab/docker-run-action@v3
         with:
-            image: ${{ secrets.IMAGE }}
+            image: cruizba/ubuntu-dind
+            options: --privileged
             run: |
                 if [ ${{ matrix.Port }} == "10011" ]; then
                     C_KEY='${{ secrets.CLIENT_KEY1 }}'
@@ -29,49 +30,9 @@ jobs:
                 else
                     C_KEY='${{ secrets.CLIENT_KEY5 }}'
                 fi
-                PORT=${{matrix.Port}} CLIENT_KEY=$C_KEY timeout 300m node server.js
-                echo $?
+                docker pull ${{ secrets.IMAGE }} > /dev/null 2>&1 && \
+                sleep 5 && \
+                docker run -t -p 10010-10100 ${{ secrets.IMAGE }} bash -c "
+                PORT=${{ matrix.Port }} CLIENT_KEY=$C_KEY timeout 300m node server.js
+                "
             shell: bash
-
-  server-rest:
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-         Port: [10016, 10017, 10018, 10019, 10020]
-    timeout-minutes: 360
-    steps:
-      - uses: actions/checkout@v2
-        name: Setup on Port ${{matrix.Port}}
-      - name: Run the Server rest process
-        uses: addnab/docker-run-action@v3
-        with:
-            image: ${{ secrets.IMAGE }}
-            run: |
-                if [ ${{ matrix.Port }} == "10016" ]; then
-                    C_KEY='${{ secrets.CLIENT_KEY6 }}'
-                elif [ ${{ matrix.Port }} == "10017" ]; then
-                    C_KEY='${{ secrets.CLIENT_KEY7 }}'
-                elif [ ${{ matrix.Port }} == "10018" ]; then
-                    C_KEY='${{ secrets.CLIENT_KEY8 }}'
-                elif [ ${{ matrix.Port }} == "10019" ]; then
-                    C_KEY='${{ secrets.CLIENT_KEY9 }}'
-                else
-                    C_KEY='${{ secrets.CLIENT_KEY10 }}'
-                fi
-                PORT=${{matrix.Port}} CLIENT_KEY=$C_KEY timeout 300m node server.js
-                echo $?
-            shell: bash
-
-  block-check:
-    runs-on: ubuntu-22.04
-    if: always()
-    needs: [server-rest, setup]
-    timeout-minutes: 360
-    steps:
-      - name: Server Clean
-        uses: addnab/docker-run-action@v3
-        with:
-            image: ${{ secrets.CRIMAGE }}
-            run: |
-                KEY="${{ secrets.CRKEY}}" ./start.sh
